@@ -26,6 +26,7 @@
   --star: #f0c040; --danger: #ff8a80; color-scheme: dark }
 
 * { box-sizing: border-box }
+[hidden] { display: none !important }
 body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.6; }
 .wrap { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; }
 h1, h2, h3 { font-family: var(--f-display); font-weight: 700; text-wrap: balance; margin: 0; line-height: 1.3 }
@@ -136,6 +137,19 @@ textarea { min-height: 9em; resize: vertical; line-height: 1.7 }
 .settings { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: .85rem; color: var(--muted) }
 .settings select { width: auto }
 
+.sheet { position: fixed; inset: 0; z-index: 30; background: color-mix(in srgb, var(--ink) 45%, transparent); display: flex; align-items: flex-end; justify-content: center; padding-top: calc(24px + env(safe-area-inset-top, 0px)) }
+.sheet .panel { background: var(--surface); color: var(--ink); width: 100%; max-width: 560px; max-height: 100%; overflow-y: auto; border-radius: 16px 16px 0 0; padding-block: 18px calc(24px + env(safe-area-inset-bottom, 0px)); padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); display: grid; gap: 14px }
+@media (min-width: 620px) { .sheet { align-items: center; padding: 24px } .sheet .panel { border-radius: 16px; max-height: calc(100% - 48px) } }
+.sheet .head { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between }
+.sheet h2 { font-size: 1.35rem }
+.sheet h3 { font-size: .8rem; letter-spacing: .08em; color: var(--muted); margin-bottom: 4px }
+.sheet ul.ingr { list-style: none; margin: 0; padding: 0 }
+.sheet ul.ingr li { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; border-bottom: 1px dashed var(--line) }
+.sheet ul.ingr li span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--muted) }
+.sheet ol.steps { margin: 0; padding-left: 1.6em; display: grid; gap: 8px; line-height: 1.75 }
+.sheet ol.steps li::marker { font-family: var(--f-display); font-weight: 700; color: var(--accent) }
+.sheet .none { color: var(--muted); font-size: .9rem }
+body.noscroll { overflow: hidden }
 #toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 999px; font-size: .9rem; max-width: calc(100% - 32px); z-index: 20 }
 @media (prefers-reduced-motion: no-preference) { #toast { transition: opacity .2s } }
 </style>
@@ -206,6 +220,9 @@ textarea { min-height: 9em; resize: vertical; line-height: 1.7 }
           <textarea id="fIng" placeholder="鶏もも肉 2枚&#10;しょうゆ 大さじ2&#10;みりん 大さじ2&#10;キャベツ 1/4個"></textarea>
         </label>
         <div class="parsed" id="parsed"></div>
+        <label class="field"><span>作り方（1行に1手順・かんたんでOK）</span>
+          <textarea id="fSteps" placeholder="鶏肉を皮目から焼く&#10;ふたをして弱火で5分&#10;しょうゆ・みりん・砂糖を入れて煮からめる"></textarea>
+        </label>
         <label class="field"><span>メモ（任意）</span><input type="text" id="fMemo" placeholder="例：次男はタレ少なめ"></label>
         <div class="form-acts">
           <button class="btn primary" type="submit" id="saveBtn">レシピ帳に入れる</button>
@@ -227,6 +244,7 @@ textarea { min-height: 9em; resize: vertical; line-height: 1.7 }
     </div>
   </section>
 </div>
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle"><div class="panel" id="sheetPanel"></div></div>
 <div id="toast" hidden role="status"></div>
 
 <script>
@@ -525,6 +543,7 @@ function renderPlan() {
           <div class="acts">
             <button class="btn small" data-act="lock" aria-pressed="${!!v?.locked}"${r ? "" : " disabled"}>固定</button>
             <button class="btn small" data-act="reroll"${v?.locked ? " disabled" : ""}>かえる</button>
+            ${r ? `<button class="btn small" data-act="view">作り方</button>` : ""}
             ${r ? `<span class="stars" aria-label="人気 ${r.rating}">${stars(r.rating)}</span>` : ""}
           </div>
         </div>`;
@@ -588,6 +607,7 @@ function renderRecipes() {
       <div class="ing">${esc((r.ingredients || []).map(i => i.name).join("、"))}</div>
       ${r.memo ? `<div class="memo">${esc(r.memo)}</div>` : ""}
       <div class="acts">
+        <button class="btn small" data-act="view">${(r.steps || "").trim() ? "作り方を見る" : "材料を見る"}</button>
         <button class="btn small" data-act="edit">編集</button>
         <button class="btn small danger" data-act="del">削除</button>
       </div>
@@ -623,6 +643,7 @@ $("week").addEventListener("click", e => {
   const slot = b.closest(".slot").dataset.slot, v = state.plan.slots[slot];
   if (b.dataset.act === "lock" && v) { v.locked = !v.locked; store.savePlan(); }
   if (b.dataset.act === "reroll") rerollOne(slot);
+  if (b.dataset.act === "view" && v) openSheet(v.id, b);
 });
 $("splitSel").onchange = (e) => { state.settings = { ...state.settings, split: e.target.value }; store.saveSettings(); };
 $("trips").addEventListener("change", e => {
@@ -659,6 +680,7 @@ $("recipeForm").addEventListener("submit", e => {
     rating: Number(document.querySelector('input[name="rating"]:checked').value),
     ingredientsText: $("fIng").value.trim(),
     ingredients: parseIngredients($("fIng").value),
+    steps: $("fSteps").value.trim(),
     memo: $("fMemo").value.trim(),
     createdAt: old?.createdAt || new Date().toISOString(),
   };
@@ -673,12 +695,16 @@ $("rlist").addEventListener("click", e => {
   const rate = e.target.closest("button[data-rate]");
   if (rate) { store.saveRecipe({ ...r, rating: Number(rate.dataset.rate) }); return; }
   const b = e.target.closest("button[data-act]"); if (!b) return;
+  if (b.dataset.act === "view") { openSheet(r.id, b); return; }
   if (b.dataset.act === "edit") {
+    closeSheet();
+    location.hash = "recipes";
     editing = r.id;
     $("fName").value = r.name;
     $({ b: "mealB", d: "mealD", both: "mealBoth" }[r.meal]).checked = true;
     $("rate" + r.rating).checked = true;
     $("fIng").value = r.ingredientsText || (r.ingredients || []).map(i => `${i.name} ${fmtQty(i.num, i.unit)}`.trim()).join("\n");
+    $("fSteps").value = r.steps || "";
     $("fMemo").value = r.memo || "";
     $("formTitle").textContent = "レシピを直す"; $("saveBtn").textContent = "保存する"; $("cancelEdit").hidden = false;
     renderParsed(); $("fName").focus();
@@ -688,6 +714,36 @@ $("rlist").addEventListener("click", e => {
     else { b.dataset.confirm = "1"; b.textContent = "本当に削除"; setTimeout(() => { if (b.isConnected) { delete b.dataset.confirm; b.textContent = "削除"; } }, 3000); }
   }
 });
+
+/* ---------- 作り方の表示 ---------- */
+let sheetFrom = null;
+function openSheet(id, from) {
+  const r = state.recipes[id]; if (!r) return;
+  sheetFrom = from || null;
+  const steps = (r.steps || "").split(/\n/).map(x => x.replace(/^\s*(\d+[.)．、]|[①-⑳]|[・\-*•])\s*/, "").trim()).filter(Boolean);
+  const ingr = r.ingredients || [];
+  $("sheetPanel").innerHTML = `
+    <div class="head"><div><h2 id="sheetTitle">${esc(r.name)}</h2><span class="stars">${stars(r.rating)}</span></div>
+      <button class="btn small" id="sheetClose">閉じる</button></div>
+    <section><h3>材料</h3>${ingr.length ? `<ul class="ingr">${ingr.map(i => `<li><span>${esc(i.name)}</span><span>${esc(fmtQty(i.num, i.unit))}</span></li>`).join("")}</ul>` : `<p class="none">材料はまだ入っていません。</p>`}</section>
+    <section><h3>作り方</h3>${steps.length ? `<ol class="steps">${steps.map(x => `<li>${esc(x)}</li>`).join("")}</ol>` : `<p class="none">作り方はまだ書いていません。「編集」から書き足せます。</p>`}</section>
+    ${r.memo ? `<section><h3>メモ</h3><p style="margin:0">${esc(r.memo)}</p></section>` : ""}
+    <div class="form-acts"><button class="btn" id="sheetEdit">編集</button></div>`;
+  $("sheet").hidden = false; document.body.classList.add("noscroll");
+  $("sheetClose").focus();
+  $("sheetClose").onclick = closeSheet;
+  $("sheetEdit").onclick = () => {
+    closeSheet(); location.hash = "recipes"; $("fltAll").checked = true; renderRecipes();
+    setTimeout(() => document.querySelector(`.rcard[data-id="${CSS.escape(id)}"] [data-act="edit"]`)?.click(), 0);
+  };
+}
+function closeSheet() {
+  if ($("sheet").hidden) return;
+  $("sheet").hidden = true; document.body.classList.remove("noscroll");
+  if (sheetFrom && sheetFrom.isConnected) sheetFrom.focus();
+}
+$("sheet").addEventListener("click", e => { if (e.target === $("sheet")) closeSheet(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeSheet(); });
 
 window.addEventListener("hashchange", renderView);
 renderView();
