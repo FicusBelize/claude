@@ -113,6 +113,7 @@ fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 4px }
 .seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px }
 input[type="text"], textarea, select.plain { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 7px 10px }
 textarea { min-height: 9em; resize: vertical; line-height: 1.7 }
+textarea.short { min-height: 6em }
 .parsed { display: flex; flex-wrap: wrap; gap: 4px; font-size: .75rem }
 .parsed span { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; color: var(--muted) }
 .parsed b { color: var(--ink); font-weight: 700 }
@@ -194,7 +195,7 @@ body.noscroll { overflow: hidden }
       <button class="btn" id="copyBtn">LINE用にコピー</button>
     </div>
     <div class="trips" id="trips"></div>
-    <p class="hint">同じ材料はまとめて合計しています。しょうゆ・塩などの調味料は「家にあるか確認」に分けました。チェックはこの週の献立に保存されます。</p>
+    <p class="hint">同じ材料はまとめて合計しています。レシピの「調味料・家にあるもの」欄に書いたものは出ません。買う材料の欄にしょうゆ・塩などが入っていると「家にあるか確認」に出ます。チェックはこの週の献立に保存されます。</p>
   </section>
 
   <section id="view-recipes" hidden>
@@ -216,10 +217,13 @@ body.noscroll { overflow: hidden }
             <label><input type="radio" name="rating" value="3" id="rate3"> ★★★ 大好き</label>
           </div>
         </fieldset>
-        <label class="field"><span>材料（1行に1つ。「名前 分量」）</span>
-          <textarea id="fIng" placeholder="鶏もも肉 2枚&#10;しょうゆ 大さじ2&#10;みりん 大さじ2&#10;キャベツ 1/4個"></textarea>
+        <label class="field"><span>買う材料（1行に1つ。「名前 分量」）</span>
+          <textarea id="fIng" placeholder="鶏もも肉 2枚&#10;キャベツ 1/4個"></textarea>
         </label>
         <div class="parsed" id="parsed"></div>
+        <label class="field"><span>調味料・家にあるもの（買い物リストには出ません）</span>
+          <textarea id="fPantry" class="short" placeholder="しょうゆ 大さじ2&#10;みりん 大さじ2&#10;砂糖 大さじ1"></textarea>
+        </label>
         <label class="field"><span>作り方（1行に1手順・かんたんでOK）</span>
           <textarea id="fSteps" placeholder="鶏肉を皮目から焼く&#10;ふたをして弱火で5分&#10;しょうゆ・みりん・砂糖を入れて煮からめる"></textarea>
         </label>
@@ -615,8 +619,18 @@ function renderRecipes() {
 }
 function renderParsed() {
   const xs = parseIngredients($("fIng").value);
-  $("parsed").innerHTML = xs.map(i => `<span>${esc(i.cat === "常備" ? "常備" : i.cat.split("・")[0])}：<b>${esc(i.name)}</b>${i.num != null || i.unit ? " " + esc(fmtQty(i.num, i.unit)) : ""}</span>`).join("");
+  const n = xs.filter(i => i.cat === "常備").length;
+  $("parsed").innerHTML = xs.map(i => `<span>${esc(i.cat === "常備" ? "常備" : i.cat.split("・")[0])}：<b>${esc(i.name)}</b>${i.num != null || i.unit ? " " + esc(fmtQty(i.num, i.unit)) : ""}</span>`).join("")
+    + (n ? ` <button type="button" class="btn small" id="movePantry">調味料${n}つを下の欄へ移す</button>` : "");
 }
+$("parsed").addEventListener("click", e => {
+  if (e.target.id !== "movePantry") return;
+  const keep = [], move = [];
+  for (const line of $("fIng").value.split(/\n/)) { const x = parseLine(line); (x && x.cat === "常備" ? move : keep).push(line); }
+  $("fIng").value = keep.join("\n").trim();
+  $("fPantry").value = [$("fPantry").value.trim(), ...move.map(l => l.trim())].filter(Boolean).join("\n");
+  renderParsed();
+});
 function renderView() {
   const v = ["plan", "shopping", "recipes"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "plan";
   for (const name of ["plan", "shopping", "recipes"]) $("view-" + name).hidden = name !== v;
@@ -680,6 +694,8 @@ $("recipeForm").addEventListener("submit", e => {
     rating: Number(document.querySelector('input[name="rating"]:checked').value),
     ingredientsText: $("fIng").value.trim(),
     ingredients: parseIngredients($("fIng").value),
+    pantryText: $("fPantry").value.trim(),
+    pantry: parseIngredients($("fPantry").value).map(i => ({ ...i, cat: "常備" })),
     steps: $("fSteps").value.trim(),
     memo: $("fMemo").value.trim(),
     createdAt: old?.createdAt || new Date().toISOString(),
@@ -704,6 +720,7 @@ $("rlist").addEventListener("click", e => {
     $({ b: "mealB", d: "mealD", both: "mealBoth" }[r.meal]).checked = true;
     $("rate" + r.rating).checked = true;
     $("fIng").value = r.ingredientsText || (r.ingredients || []).map(i => `${i.name} ${fmtQty(i.num, i.unit)}`.trim()).join("\n");
+    $("fPantry").value = r.pantryText || (r.pantry || []).map(i => `${i.name} ${fmtQty(i.num, i.unit)}`.trim()).join("\n");
     $("fSteps").value = r.steps || "";
     $("fMemo").value = r.memo || "";
     $("formTitle").textContent = "レシピを直す"; $("saveBtn").textContent = "保存する"; $("cancelEdit").hidden = false;
@@ -726,6 +743,7 @@ function openSheet(id, from) {
     <div class="head"><div><h2 id="sheetTitle">${esc(r.name)}</h2><span class="stars">${stars(r.rating)}</span></div>
       <button class="btn small" id="sheetClose">閉じる</button></div>
     <section><h3>材料</h3>${ingr.length ? `<ul class="ingr">${ingr.map(i => `<li><span>${esc(i.name)}</span><span>${esc(fmtQty(i.num, i.unit))}</span></li>`).join("")}</ul>` : `<p class="none">材料はまだ入っていません。</p>`}</section>
+    ${(r.pantry || []).length ? `<section><h3>調味料など</h3><ul class="ingr">${r.pantry.map(i => `<li><span>${esc(i.name)}</span><span>${esc(fmtQty(i.num, i.unit))}</span></li>`).join("")}</ul></section>` : ""}
     <section><h3>作り方</h3>${steps.length ? `<ol class="steps">${steps.map(x => `<li>${esc(x)}</li>`).join("")}</ol>` : `<p class="none">作り方はまだ書いていません。「編集」から書き足せます。</p>`}</section>
     ${r.memo ? `<section><h3>メモ</h3><p style="margin:0">${esc(r.memo)}</p></section>` : ""}
     <div class="form-acts"><button class="btn" id="sheetEdit">編集</button></div>`;
