@@ -66,12 +66,15 @@ nav.tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--
 .day .dname small { font-family: var(--f-body); font-weight: 400; color: var(--muted); font-size: .75rem; font-variant-numeric: tabular-nums }
 .slot { min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border-radius: 8px; background: var(--bg) }
 .slot .meta { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: .75rem; color: var(--muted) }
-.slot select { width: 100%; min-width: 0; border: 1px solid transparent; background: transparent; font-family: var(--f-display); font-weight: 700; font-size: 1rem; padding: 2px 0; border-radius: 6px; text-overflow: ellipsis }
-.slot select:hover { border-color: var(--line) }
-.slot .acts { display: flex; gap: 4px; align-items: center }
+.slot .dish { display: block; width: 100%; min-width: 0; text-align: left; border: 0; background: none; padding: 4px 0 2px; font-family: var(--f-display); font-weight: 700; font-size: 1.05rem; line-height: 1.35; color: var(--ink); overflow-wrap: anywhere }
+.slot .dish .go { display: block; font-family: var(--f-body); font-weight: 400; font-size: .75rem; color: var(--accent) }
+.slot button.dish:hover .go, .slot button.dish:focus-visible .go { text-decoration: underline }
+.slot .dish.none { color: var(--muted); font-weight: 500; font-size: .95rem }
+.slot select.pick { appearance: none; -webkit-appearance: none; width: 4.6em; border: 1px solid var(--line); text-align: center; text-align-last: center; background: var(--surface); border-radius: 999px; padding: 2px 10px; font-size: .8rem; cursor: pointer }
+.slot select.pick:hover { border-color: var(--accent) }
+.slot .acts { display: flex; flex-wrap: wrap; gap: 4px; align-items: center }
 .slot .acts .stars { margin-left: auto }
 .slot.locked { background: var(--accent-soft) }
-.slot.empty select { color: var(--muted); font-weight: 500 }
 .stars { color: var(--star); letter-spacing: 1px; font-size: .85rem; white-space: nowrap }
 @media (min-width: 520px) and (max-width: 819px) {
   .day { grid-template-columns: 1fr 1fr }
@@ -179,7 +182,7 @@ body.noscroll { overflow: hidden }
     </div>
     <div class="legend" id="legend"></div>
     <div class="week" id="week" style="margin-top:10px"></div>
-    <p class="hint">「固定」したマスは自動で作り直しても変わりません。メニュー名をタップすると自分で選べます。子どもに人気（★が多い）のレシピほど選ばれやすく、同じ週に同じ夜ごはんは出にくく、前の日と同じ肉・魚が続きにくくなっています。</p>
+    <p class="hint">「固定」したマスは自動で作り直しても変わりません。メニュー名をタップすると材料・調味料・作り方が開きます。「えらぶ」で自分でも決められます。子どもに人気（★が多い）のレシピほど選ばれやすく、同じ週に同じ夜ごはんは出にくく、前の日と同じ肉・魚が続きにくくなっています。</p>
   </section>
 
   <section id="view-shopping" hidden>
@@ -540,14 +543,16 @@ function renderPlan() {
         const opts = list.filter(x => fits(x, m));
         return `<div class="slot${v?.locked ? " locked" : ""}${r ? "" : " empty"}" data-slot="${s}">
           <div class="meta"><span>${mj}ごはん</span><span class="trip ${tripOf(s)}">${tripOf(s) === "a" ? "土日" : "水曜"}</span></div>
-          <select id="sel-${s}" aria-label="${dj}曜の${mj}ごはん">
-            <option value="">${opts.length ? "（未定）" : "（レシピなし）"}</option>
-            ${opts.map(x => `<option value="${esc(x.id)}"${r && x.id === r.id ? " selected" : ""}>${esc(x.name)}</option>`).join("")}
-          </select>
+          ${r ? `<button class="dish" data-act="view">${esc(r.name)}<span class="go">作り方・調味料を見る ›</span></button>`
+              : `<span class="dish none">${opts.length ? "未定" : "レシピがありません"}</span>`}
           <div class="acts">
             <button class="btn small" data-act="lock" aria-pressed="${!!v?.locked}"${r ? "" : " disabled"}>固定</button>
             <button class="btn small" data-act="reroll"${v?.locked ? " disabled" : ""}>かえる</button>
-            ${r ? `<button class="btn small" data-act="view">作り方</button>` : ""}
+            <select class="pick" id="sel-${s}" aria-label="${dj}曜の${mj}ごはんを選ぶ"${opts.length ? "" : " disabled"}>
+              <option value="" selected>えらぶ</option>
+              ${opts.map(x => `<option value="${esc(x.id)}">${r && x.id === r.id ? "✓ " : ""}${esc(x.name)}</option>`).join("")}
+              ${r ? `<option value="__clear">（空にする）</option>` : ""}
+            </select>
             ${r ? `<span class="stars" aria-label="人気 ${r.rating}">${stars(r.rating)}</span>` : ""}
           </div>
         </div>`;
@@ -649,7 +654,8 @@ $("clearBtn").onclick = () => { for (const s of SLOTS) if (!state.plan.slots[s]?
 $("week").addEventListener("change", e => {
   const slot = e.target.closest(".slot")?.dataset.slot; if (!slot) return;
   const id = e.target.value;
-  state.plan.slots[slot] = id ? { id, locked: true } : null;
+  if (!id) return;
+  state.plan.slots[slot] = id === "__clear" ? null : { id, locked: true };
   store.savePlan();
 });
 $("week").addEventListener("click", e => {
