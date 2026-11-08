@@ -1,5 +1,5 @@
 // 漢字練習帖PDFを作る: node make.js <fontCssPath>
-// 第1回 = 1〜100字目, 第2回 = 61〜160字目（40字かぶり）
+// 第1回 = 1〜70字目（70字）, 第2回 = 61〜160字目（100字）。かぶりは61〜70字目の10字
 const fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
 const dir = __dirname;
@@ -10,7 +10,7 @@ const rows = fs.readFileSync(path.join(dir, 'grade2.tsv'), 'utf8').trim().split(
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 const kunHtml = s => s ? s.split('・').map(r => esc(r).replace(/\((.+?)\)/, '<span class="okuri">$1</span>')).join('<br>') : '';
 
-function page(set, p, items, startNo) {
+function page(set, p, total, items, startNo) {
   const cols = items.map((it, i) => `
     <div class="col">
       <div class="no">${startNo + i}</div>
@@ -26,7 +26,7 @@ function page(set, p, items, startNo) {
     </div>`).join('');
   return `<section class="page">
     <header>
-      <div class="title">かんじ れんしゅうちょう <b>第${set}回</b>　${p} / 10ページ</div>
+      <div class="title">かんじ れんしゅうちょう <b>第${set}回</b>　${p} / ${total}ページ</div>
       <div class="meta"><span>&emsp;&emsp;月&emsp;&emsp;日</span><span class="name">なまえ</span><span class="done">できた<i></i></span></div>
     </header>
     <div class="grid">${cols}</div>
@@ -35,7 +35,8 @@ function page(set, p, items, startNo) {
 
 function html(set, list, offset) {
   const pages = [];
-  for (let p = 0; p < 10; p++) pages.push(page(set, p + 1, list.slice(p * 10, p * 10 + 10), offset + p * 10 + 1));
+  const total = Math.ceil(list.length / 10);
+  for (let p = 0; p < total; p++) pages.push(page(set, p + 1, total, list.slice(p * 10, p * 10 + 10), offset + p * 10 + 1));
   return `<!doctype html><html lang="ja"><head><meta charset="utf-8">
 <style>
 ${fontCss ? fs.readFileSync(fontCss, 'utf8') : ''}
@@ -69,7 +70,7 @@ header { height: 13mm; white-space: nowrap; display: flex; justify-content: spac
 
 (async () => {
   const browser = await chromium.launch();
-  const sets = [[1, rows.slice(0, 100), 0], [2, rows.slice(60, 160), 60]];
+  const sets = [[1, rows.slice(0, 70), 0], [2, rows.slice(60, 160), 60]];
   for (const [set, list, off] of sets) {
     const pg = await browser.newPage();
     const tmp = path.join(path.dirname(fontCss || dir), `_set${set}.html`);
