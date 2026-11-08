@@ -1,19 +1,20 @@
 // 漢字練習帖PDFを作る: node make.js <fontCssPath>
-// 第1回 = 1〜70字目（70字）, 第2回 = 61〜160字目（100字）。かぶりは61〜70字目の10字
+// 第1回 = 1〜100字目（100字・使用済み）
+// 第2回 = 101〜160字目（60字）＋ 第1回とかぶる61〜100字目のうち画数の多い10字 ＝ 70字
 const fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
 const dir = __dirname;
 const fontCss = process.argv[2];
 const rows = fs.readFileSync(path.join(dir, 'grade2.tsv'), 'utf8').trim().split('\n')
-  .map(l => { const [k, on, kun, n] = l.split('\t'); return { k, on, kun, n }; });
+  .map((l, i) => { const [k, on, kun, n] = l.split('\t'); return { k, on, kun, n, no: i + 1 }; });
 
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 const kunHtml = s => s ? s.split('・').map(r => esc(r).replace(/\((.+?)\)/, '<span class="okuri">$1</span>')).join('<br>') : '';
 
-function page(set, p, total, items, startNo) {
+function page(set, p, total, items) {
   const cols = items.map((it, i) => `
     <div class="col">
-      <div class="no">${startNo + i}</div>
+      <div class="no">${it.no}</div>
       <div class="model">
         <div class="big">${it.k}</div>
         <div class="read">
@@ -33,10 +34,10 @@ function page(set, p, total, items, startNo) {
   </section>`;
 }
 
-function html(set, list, offset) {
+function html(set, list) {
   const pages = [];
   const total = Math.ceil(list.length / 10);
-  for (let p = 0; p < total; p++) pages.push(page(set, p + 1, total, list.slice(p * 10, p * 10 + 10), offset + p * 10 + 1));
+  for (let p = 0; p < total; p++) pages.push(page(set, p + 1, total, list.slice(p * 10, p * 10 + 10)));
   return `<!doctype html><html lang="ja"><head><meta charset="utf-8">
 <style>
 ${fontCss ? fs.readFileSync(fontCss, 'utf8') : ''}
@@ -70,11 +71,14 @@ header { height: 13mm; white-space: nowrap; display: flex; justify-content: spac
 
 (async () => {
   const browser = await chromium.launch();
-  const sets = [[1, rows.slice(0, 70), 0], [2, rows.slice(60, 160), 60]];
-  for (const [set, list, off] of sets) {
+  const overlap = rows.slice(60, 100);
+  const keep = new Set([...overlap].sort((a, b) => b.n - a.n || a.no - b.no).slice(0, 10).map(r => r.no));
+  const set2 = [...overlap.filter(r => keep.has(r.no)), ...rows.slice(100)];
+  const sets = [[1, rows.slice(0, 100)], [2, set2]];
+  for (const [set, list] of sets) {
     const pg = await browser.newPage();
     const tmp = path.join(path.dirname(fontCss || dir), `_set${set}.html`);
-    fs.writeFileSync(tmp, html(set, list, off));
+    fs.writeFileSync(tmp, html(set, list));
     await pg.goto('file://' + tmp, { waitUntil: 'networkidle' });
     await pg.evaluate(() => document.fonts.ready);
     await pg.pdf({ path: path.join(dir, `漢字練習帖_第${set}回.pdf`), format: 'A4', printBackground: true, preferCSSPageSize: true });
