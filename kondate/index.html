@@ -75,9 +75,12 @@ nav.tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--
 .slot .acts { display: flex; flex-wrap: wrap; gap: 4px; align-items: center }
 .slot .acts .stars { margin-left: auto }
 .slot.locked { background: var(--accent-soft) }
+.slot.side { margin-top: -4px; border-top: 1px dashed var(--line); border-top-left-radius: 0; border-top-right-radius: 0 }
+.slot.main { border-bottom-left-radius: 0; border-bottom-right-radius: 0 }
+@media (min-width: 520px) and (max-width: 819px) { .slot.side, .slot.main { margin-top: 0; border-top: 0; border-radius: 8px } }
 .stars { color: var(--star); letter-spacing: 1px; font-size: .85rem; white-space: nowrap }
 @media (min-width: 520px) and (max-width: 819px) {
-  .day { grid-template-columns: 1fr 1fr }
+  .day { grid-template-columns: repeat(3, minmax(0, 1fr)) }
   .day .dname { grid-column: 1 / -1 }
 }
 @media (min-width: 820px) {
@@ -182,7 +185,7 @@ body.noscroll { overflow: hidden }
     </div>
     <div class="legend" id="legend"></div>
     <div class="week" id="week" style="margin-top:10px"></div>
-    <p class="hint">「固定」したマスは自動で作り直しても変わりません。メニュー名をタップすると材料・調味料・作り方が開きます。「えらぶ」で自分でも決められます。子どもに人気（★が多い）のレシピほど選ばれやすく、同じ週に同じ夜ごはんは出にくく、前の日と同じ肉・魚が続きにくくなっています。</p>
+    <p class="hint">「固定」したマスは自動で作り直しても変わりません。メニュー名をタップすると材料・調味料・作り方が開きます。「えらぶ」で自分でも決められます。子どもに人気（★が多い）のレシピほど選ばれやすく、夜はメインと副菜が1品ずつ。同じ週に同じおかずは出にくく、前の日と同じ肉・魚が続きにくくなっています。</p>
   </section>
 
   <section id="view-shopping" hidden>
@@ -209,8 +212,9 @@ body.noscroll { overflow: hidden }
         <fieldset><legend>いつ食べる？</legend>
           <div class="seg">
             <label><input type="radio" name="meal" value="b" id="mealB"> 朝ごはん</label>
-            <label><input type="radio" name="meal" value="d" id="mealD" checked> 夜ごはん</label>
-            <label><input type="radio" name="meal" value="both" id="mealBoth"> どちらも</label>
+            <label><input type="radio" name="meal" value="d" id="mealD" checked> 夜・メイン</label>
+            <label><input type="radio" name="meal" value="side" id="mealSide"> 夜・副菜</label>
+            <label><input type="radio" name="meal" value="both" id="mealBoth"> 朝にも夜メインにも</label>
           </div>
         </fieldset>
         <fieldset><legend>子どもの人気</legend>
@@ -241,7 +245,8 @@ body.noscroll { overflow: hidden }
           <div class="seg" role="group" aria-label="しぼりこみ">
             <label><input type="radio" name="flt" value="all" id="fltAll" checked> すべて</label>
             <label><input type="radio" name="flt" value="b" id="fltB"> 朝</label>
-            <label><input type="radio" name="flt" value="d" id="fltD"> 夜</label>
+            <label><input type="radio" name="flt" value="d" id="fltD"> 夜メイン</label>
+            <label><input type="radio" name="flt" value="s" id="fltS"> 副菜</label>
           </div>
           <span class="grow"></span>
           <span class="store-note" id="rcount"></span>
@@ -258,7 +263,8 @@ body.noscroll { overflow: hidden }
 (() => {
 "use strict";
 const DAYS = [["mon","月"],["tue","火"],["wed","水"],["thu","木"],["fri","金"]];
-const MEALS = [["b","朝"],["d","夜"]];
+const MEALS = [["b","朝ごはん"],["d","夜・メイン"],["s","夜・副菜"]];
+const SHORT = { b: "朝", d: "夜", s: "夜(副菜)" };
 const SLOTS = DAYS.flatMap(([d]) => MEALS.map(([m]) => d + "_" + m));
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -310,9 +316,10 @@ function parseAmount(raw) {
 function parseLine(line) {
   const t = line.replace(/^[\s・\-*•◯○]+/, "").trim();
   if (!t) return null;
-  const m = t.match(/^(.+?)[\s　]+(\S+)$/);
+  // 「切り干し大根 30 g」のように数字と単位の間が空いていても読めるようにする
+  const m = toHalf(t).match(/^(.+?)[\s　]+((?:大さじ|小さじ|カップ)?[\s　]*[\d.\/]+[\s　]*[^\s　\d]*)$/) || t.match(/^(.+?)[\s　]+(\S+)$/);
   const name = (m ? m[1] : t).trim();
-  const amt = parseAmount(m ? m[2] : "");
+  const amt = parseAmount(m ? m[2].replace(/[\s　]+/g, "") : "");
   return { name, ...amt, cat: categorize(name) };
 }
 const parseIngredients = (text) => (text || "").split(/\n/).map(parseLine).filter(Boolean);
@@ -344,7 +351,14 @@ const state = {
 };
 function emptyPlan() { return { slots: {}, checked: {} }; }
 const recipeList = () => Object.values(state.recipes).sort((a, b) => (b.rating - a.rating) || a.name.localeCompare(b.name, "ja"));
-const fits = (r, meal) => r.meal === meal || r.meal === "both";
+// 保存してある材料の文字から読み直す（読み取りを直したとき、前のレシピにも効くように）
+function normalize(r) {
+  const out = { ...r };
+  if (typeof r.ingredientsText === "string") out.ingredients = parseIngredients(r.ingredientsText);
+  if (typeof r.pantryText === "string") out.pantry = parseIngredients(r.pantryText).map(i => ({ ...i, cat: "常備" }));
+  return out;
+}
+const fits = (r, meal) => meal === "s" ? r.meal === "side" : (r.meal === meal || r.meal === "both");
 
 /* ---------- 保存先：クラウド(db) か このブラウザ ---------- */
 const LS_KEY = "kondate-v1";
@@ -420,7 +434,7 @@ async function boot() {
     const timer = setTimeout(() => { if (!loaded) setNote("保存先につながりません。少し待つと表示されます"); }, 10000);
     db.collection("recipes").onSnapshot(snap => {
       const next = {};
-      for (const doc of snap.docs) { const v = doc.data(); if (v && v.name) next[doc.id] = { ...v, id: doc.id }; }
+      for (const doc of snap.docs) { const v = doc.data(); if (v && v.name) next[doc.id] = normalize({ ...v, id: doc.id }); }
       state.recipes = next;
       if (!snap.metadata.fromCache) { loaded = true; clearTimeout(timer); setNote("家族で共有の保存先に保存しています"); }
       renderAll();
@@ -429,7 +443,7 @@ async function boot() {
   } else {
     state.mode = "local";
     const d = local.read();
-    state.recipes = d.recipes || {};
+    state.recipes = Object.fromEntries(Object.entries(d.recipes || {}).map(([k, v]) => [k, normalize(v)]));
     state.settings = { split: "thu_b", ...(d.settings || {}) };
     setNote("このブラウザに保存しています");
   }
@@ -454,7 +468,7 @@ function pickFor(slot, chosen) {
   const weights = pool.map(r => {
     let w = [0, 1, 2.2, 4][r.rating || 2];
     const times = used.filter(id => id === r.id).length;
-    if (times) w *= meal === "b" ? Math.pow(0.35, times) : Math.pow(0.04, times);
+    if (times) w *= Math.pow({ b: 0.35, s: 0.15, d: 0.04 }[meal], times);
     if (prevIds.has(r.id)) w *= 0.5;
     const mn = mainOf(r);
     if (mn && neighborMains.includes(mn)) w *= 0.3;
@@ -477,14 +491,17 @@ function autoFill() {
   const chosen = currentChosen();
   const open = SLOTS.filter(s => !state.plan.slots[s]?.locked);
   // 夜ごはん→朝ごはんの順に決める（夜の方が材料が多いので、朝は夜の材料と合わせやすくなる）
-  open.sort((a, b) => (a.endsWith("_d") ? 0 : 1) - (b.endsWith("_d") ? 0 : 1));
+  // 夜メイン→副菜→朝の順に決める（メインの材料と合わせやすくする）
+  const ord = { d: 0, s: 1, b: 2 };
+  open.sort((a, b) => ord[a.split("_")[1]] - ord[b.split("_")[1]]);
   for (const s of open) chosen[s] = null;
   for (const s of open) chosen[s] = pickFor(s, chosen);
   for (const s of open) state.plan.slots[s] = chosen[s] ? { id: chosen[s], locked: false } : null;
   state.plan.checked = {};
   store.savePlan();
   const missing = open.filter(s => !chosen[s]);
-  toast(missing.length ? `${missing.some(s => s.endsWith("_b")) ? "朝" : "夜"}ごはんのレシピが足りないマスがあります` : "献立を作りました");
+  const lack = [...new Set(missing.map(s => ({ b: "朝ごはん", d: "夜のメイン", s: "副菜" })[s.split("_")[1]]))];
+  toast(lack.length ? `${lack.join("・")}のレシピが足りません。レシピ帳に入れてください` : "献立を作りました");
 }
 function rerollOne(slot) {
   const chosen = currentChosen(); chosen[slot] = null;
@@ -501,7 +518,7 @@ function buildTrips() {
     const v = state.plan.slots[s]; const r = v && state.recipes[v.id];
     if (!r) continue;
     const [day, meal] = s.split("_");
-    const label = DAYS.find(([d]) => d === day)[1] + (meal === "b" ? "朝" : "夜");
+    const label = DAYS.find(([d]) => d === day)[1] + SHORT[meal];
     const t = trips[tripOf(s)];
     for (const i of r.ingredients || []) {
       const key = i.name;
@@ -541,14 +558,14 @@ function renderPlan() {
       ${MEALS.map(([m, mj]) => {
         const s = d + "_" + m, v = state.plan.slots[s], r = v && state.recipes[v.id];
         const opts = list.filter(x => fits(x, m));
-        return `<div class="slot${v?.locked ? " locked" : ""}${r ? "" : " empty"}" data-slot="${s}">
-          <div class="meta"><span>${mj}ごはん</span><span class="trip ${tripOf(s)}">${tripOf(s) === "a" ? "土日" : "水曜"}</span></div>
+        return `<div class="slot${v?.locked ? " locked" : ""}${r ? "" : " empty"}${m === "d" ? " main" : m === "s" ? " side" : ""}" data-slot="${s}">
+          <div class="meta"><span>${mj}</span><span class="trip ${tripOf(s)}">${tripOf(s) === "a" ? "土日" : "水曜"}</span></div>
           ${r ? `<button class="dish" data-act="view">${esc(r.name)}<span class="go">作り方・調味料を見る ›</span></button>`
               : `<span class="dish none">${opts.length ? "未定" : "レシピがありません"}</span>`}
           <div class="acts">
             <button class="btn small" data-act="lock" aria-pressed="${!!v?.locked}"${r ? "" : " disabled"}>固定</button>
             <button class="btn small" data-act="reroll"${v?.locked ? " disabled" : ""}>かえる</button>
-            <select class="pick" id="sel-${s}" aria-label="${dj}曜の${mj}ごはんを選ぶ"${opts.length ? "" : " disabled"}>
+            <select class="pick" id="sel-${s}" aria-label="${dj}曜の${mj}を選ぶ"${opts.length ? "" : " disabled"}>
               <option value="" selected>えらぶ</option>
               ${opts.map(x => `<option value="${esc(x.id)}">${r && x.id === r.id ? "✓ " : ""}${esc(x.name)}</option>`).join("")}
               ${r ? `<option value="__clear">（空にする）</option>` : ""}
@@ -601,12 +618,13 @@ function renderRecipes() {
   const f = filterVal();
   const list = f === "all" ? all : all.filter(r => fits(r, f));
   const nb = all.filter(r => fits(r, "b")).length, nd = all.filter(r => fits(r, "d")).length;
-  $("rcount").textContent = `朝 ${nb}品・夜 ${nd}品`;
+  const ns = all.filter(r => fits(r, "s")).length;
+  $("rcount").textContent = `朝 ${nb}品・メイン ${nd}品・副菜 ${ns}品`;
   if (!all.length) {
-    $("rlist").innerHTML = `<div class="empty-state"><strong>まだレシピがありません。</strong><br>子どもたちが喜んだ料理を、左の欄から1つずつ入れていきましょう。朝ごはん3品・夜ごはん5品くらいあると、自動の献立がうまく回ります。</div>`;
+    $("rlist").innerHTML = `<div class="empty-state"><strong>まだレシピがありません。</strong><br>子どもたちが喜んだ料理を、左の欄から1つずつ入れていきましょう。朝ごはん3品・夜のメイン5品・副菜4品くらいあると、自動の献立がうまく回ります。</div>`;
     return;
   }
-  const mealJ = { b: "朝", d: "夜", both: "朝・夜" };
+  const mealJ = { b: "朝", d: "夜・メイン", side: "夜・副菜", both: "朝・夜メイン" };
   $("rlist").innerHTML = list.map(r => `
     <article class="rcard" data-id="${esc(r.id)}">
       <div class="row"><h3>${esc(r.name)}</h3>
@@ -723,7 +741,7 @@ $("rlist").addEventListener("click", e => {
     location.hash = "recipes";
     editing = r.id;
     $("fName").value = r.name;
-    $({ b: "mealB", d: "mealD", both: "mealBoth" }[r.meal]).checked = true;
+    $({ b: "mealB", d: "mealD", side: "mealSide", both: "mealBoth" }[r.meal]).checked = true;
     $("rate" + r.rating).checked = true;
     $("fIng").value = r.ingredientsText || (r.ingredients || []).map(i => `${i.name} ${fmtQty(i.num, i.unit)}`.trim()).join("\n");
     $("fPantry").value = r.pantryText || (r.pantry || []).map(i => `${i.name} ${fmtQty(i.num, i.unit)}`.trim()).join("\n");
