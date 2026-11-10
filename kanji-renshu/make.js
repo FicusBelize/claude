@@ -1,12 +1,16 @@
 // 漢字練習帖PDFを作る: node make.js <fontCssPath>
 // 第1回 = 1〜100字目（100字・使用済み）
+// 第3回 = 1年生の80字から、かんたんな30字（数字・画数の少ない字）を除いた50字
 // 第2回 = 101〜160字目（60字）＋ 第1回とかぶる61〜100字目のうち画数の多い10字 ＝ 70字
 const fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
 const dir = __dirname;
 const fontCss = process.argv[2];
-const rows = fs.readFileSync(path.join(dir, 'grade2.tsv'), 'utf8').trim().split('\n')
+const load = f => fs.readFileSync(path.join(dir, f), 'utf8').trim().split('\n')
   .map((l, i) => { const [k, on, kun, n] = l.split('\t'); return { k, on, kun, n, no: i + 1 }; });
+const rows = load('grade2.tsv');
+const EASY1 = new Set([...'一二三四五六七八九十人入力口山子女小上下大土千川夕日月火水木']);
+const set3 = load('grade1.tsv').filter(r => !EASY1.has(r.k)).map((r, i) => ({ ...r, no: i + 1 }));
 
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 const kunHtml = s => s ? s.split('・').map(r => esc(r).replace(/\((.+?)\)/, '<span class="okuri">$1</span>')).join('<br>') : '';
@@ -27,7 +31,7 @@ function page(set, p, total, items) {
     </div>`).join('');
   return `<section class="page">
     <header>
-      <div class="title">かんじ れんしゅうちょう <b>第${set}回</b>　${p} / ${total}ページ</div>
+      <div class="title">かんじ れんしゅうちょう <b>第${set}回</b>${set === 3 ? '（1年生）' : ''}　${p} / ${total}ページ</div>
       <div class="meta"><span>&emsp;&emsp;月&emsp;&emsp;日</span><span class="name">なまえ</span><span class="done">できた<i></i></span></div>
     </header>
     <div class="grid">${cols}</div>
@@ -74,7 +78,7 @@ header { height: 13mm; white-space: nowrap; display: flex; justify-content: spac
   const overlap = rows.slice(60, 100);
   const keep = new Set([...overlap].sort((a, b) => b.n - a.n || a.no - b.no).slice(0, 10).map(r => r.no));
   const set2 = [...overlap.filter(r => keep.has(r.no)), ...rows.slice(100)];
-  const sets = [[1, rows.slice(0, 100)], [2, set2]];
+  const sets = [[1, rows.slice(0, 100)], [2, set2], [3, set3]];
   for (const [set, list] of sets) {
     const pg = await browser.newPage();
     const tmp = path.join(path.dirname(fontCss || dir), `_set${set}.html`);
