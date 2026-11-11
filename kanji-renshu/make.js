@@ -2,7 +2,7 @@
 // 第1回 = 1〜100字目（100字・使用済み）
 // 第3回 = 1年生の80字から、かんたんな30字（数字・画数の少ない字）を除いた50字
 // 第4回 = 2年生の画数の多い40字 ＋ 3年生10字（10字ごとに2年8字＋3年2字）
-// 第5回 = 2年生の次に画数の多い40字（第4回と別）＋ 別の3年生10字、並びは第4回と同じ
+// 第5回 = 2年生の次に画数の多い35字（第4回と別）＋ 別の3年生15字（10字ごとに2年7字＋3年3字）
 // 第2回 = 101〜160字目（60字）＋ 第1回とかぶる61〜100字目のうち画数の多い10字 ＝ 70字
 const fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
@@ -14,14 +14,15 @@ const rows = load('grade2.tsv');
 const EASY1 = new Set([...'一二三四五六七八九十人入力口山子女小上下大土千川夕日月火水木']);
 const byStrokes = [...rows].sort((a, b) => b.n - a.n || a.no - b.no);
 const g3all = load('grade3.tsv').map(r => ({ ...r, g3: true }));
-function mixSet(g2, g3) {
+function mixSet(g2, g3, per3) {
   g2 = [...g2].sort((a, b) => a.no - b.no);
-  const out = [];
-  for (let p = 0; p < 5; p++) out.push(...g2.slice(p * 8, p * 8 + 8), ...g3.slice(p * 2, p * 2 + 2));
+  g3 = [...g3].sort((a, b) => a.n - b.n);
+  const per2 = 10 - per3, out = [];
+  for (let p = 0; p < 5; p++) out.push(...g2.slice(p * per2, (p + 1) * per2), ...g3.slice(p * per3, (p + 1) * per3));
   return out.map((r, i) => ({ ...r, no: i + 1 }));
 }
-const set4 = mixSet(byStrokes.slice(0, 40), g3all.filter(r => r.set === '4'));
-const set5 = mixSet(byStrokes.slice(40, 80), g3all.filter(r => r.set === '5'));
+const set4 = mixSet(byStrokes.slice(0, 40), g3all.filter(r => r.set === '4'), 2);
+const set5 = mixSet(byStrokes.slice(40, 75), g3all.filter(r => r.set === '5'), 3);
 const set3 = load('grade1.tsv').filter(r => !EASY1.has(r.k)).map((r, i) => ({ ...r, no: i + 1 }));
 
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
