@@ -1,6 +1,7 @@
 // 漢字練習帖PDFを作る: node make.js <fontCssPath>
 // 第1回 = 1〜100字目（100字・使用済み）
 // 第3回 = 1年生の80字から、かんたんな30字（数字・画数の少ない字）を除いた50字
+// 第4回 = 2年生の画数の多い40字 ＋ 3年生10字（10字ごとに2年8字＋3年2字）
 // 第2回 = 101〜160字目（60字）＋ 第1回とかぶる61〜100字目のうち画数の多い10字 ＝ 70字
 const fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
@@ -10,6 +11,11 @@ const load = f => fs.readFileSync(path.join(dir, f), 'utf8').trim().split('\n')
   .map((l, i) => { const [k, on, kun, n] = l.split('\t'); return { k, on, kun, n, no: i + 1 }; });
 const rows = load('grade2.tsv');
 const EASY1 = new Set([...'一二三四五六七八九十人入力口山子女小上下大土千川夕日月火水木']);
+const g2hard = [...rows].sort((a, b) => b.n - a.n || a.no - b.no).slice(0, 40).sort((a, b) => a.no - b.no);
+const g3 = load('grade3.tsv').map(r => ({ ...r, g3: true }));
+const set4 = [];
+for (let p = 0; p < 5; p++) set4.push(...g2hard.slice(p * 8, p * 8 + 8), ...g3.slice(p * 2, p * 2 + 2));
+set4.forEach((r, i) => r.no = i + 1);
 const set3 = load('grade1.tsv').filter(r => !EASY1.has(r.k)).map((r, i) => ({ ...r, no: i + 1 }));
 
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -18,7 +24,7 @@ const kunHtml = s => s ? s.split('・').map(r => esc(r).replace(/\((.+?)\)/, '<s
 function page(set, p, total, items) {
   const cols = items.map((it, i) => `
     <div class="col">
-      <div class="no">${it.no}</div>
+      <div class="no${it.g3 ? ' g3' : ''}">${it.g3 ? '3年 ' : ''}${it.no}</div>
       <div class="model">
         <div class="big">${it.k}</div>
         <div class="read">
@@ -61,6 +67,7 @@ header { height: 13mm; white-space: nowrap; display: flex; justify-content: spac
 .model { height: 63mm; border-bottom: 0.5mm solid #333; display: flex; flex-direction: column; align-items: center; padding-top: 1mm; }
 .big { font-size: 40pt; line-height: 17mm; font-weight: 600; }
 .read { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 1.5mm; writing-mode: vertical-rl; font-size: 10pt; line-height: 1.25; margin-top: 1mm; overflow: hidden; }
+.no.g3 { background: #fbe3c4; color: #8a4b00; font-weight: 600; }
 .on { color: #c0392b; } .kun { color: #1f5fa8; }
 .okuri { color: #888; }
 .strokes { font-size: 7.5pt; color: #555; height: 4.5mm; }
@@ -78,8 +85,9 @@ header { height: 13mm; white-space: nowrap; display: flex; justify-content: spac
   const overlap = rows.slice(60, 100);
   const keep = new Set([...overlap].sort((a, b) => b.n - a.n || a.no - b.no).slice(0, 10).map(r => r.no));
   const set2 = [...overlap.filter(r => keep.has(r.no)), ...rows.slice(100)];
-  const sets = [[1, rows.slice(0, 100)], [2, set2], [3, set3]];
+  const sets = [[1, rows.slice(0, 100)], [2, set2], [3, set3], [4, set4]];
   for (const [set, list] of sets) {
+    if (process.argv[3] && !process.argv[3].split(',').includes(String(set))) continue;
     const pg = await browser.newPage();
     const tmp = path.join(path.dirname(fontCss || dir), `_set${set}.html`);
     fs.writeFileSync(tmp, html(set, list));
