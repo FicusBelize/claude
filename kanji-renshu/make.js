@@ -4,6 +4,7 @@
 // 第4回 = 2年生の画数の多い40字 ＋ 3年生10字（10字ごとに2年8字＋3年2字）
 // 第5回 = 2年生の次に画数の多い35字（第4回と別）＋ 別の3年生15字（10字ごとに2年7字＋3年3字）
 // 第6回 = 2年生20字（第5回で外した5字＋その次に画数の多い15字）＋ 別の3年生20字（10字ごとに5字＋5字）・4ページ
+// 第7回 = 2年生25字（第6回の次に画数の多い字）＋ 別の3年生25字（10字ごとに5字＋5字）・5ページ
 // 第2回 = 101〜160字目（60字）＋ 第1回とかぶる61〜100字目のうち画数の多い10字 ＝ 70字
 const fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
@@ -25,6 +26,7 @@ function mixSet(g2, g3, per3) {
 const set4 = mixSet(byStrokes.slice(0, 40), g3all.filter(r => r.set === '4'), 2);
 const set5 = mixSet(byStrokes.slice(40, 75), g3all.filter(r => r.set === '5'), 3);
 const set6 = mixSet(byStrokes.slice(75, 95), g3all.filter(r => r.set === '6'), 5);
+const set7 = mixSet(byStrokes.slice(95, 120), g3all.filter(r => r.set === '7'), 5);
 const set3 = load('grade1.tsv').filter(r => !EASY1.has(r.k)).map((r, i) => ({ ...r, no: i + 1 }));
 
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -94,7 +96,7 @@ header { height: 13mm; white-space: nowrap; display: flex; justify-content: spac
   const overlap = rows.slice(60, 100);
   const keep = new Set([...overlap].sort((a, b) => b.n - a.n || a.no - b.no).slice(0, 10).map(r => r.no));
   const set2 = [...overlap.filter(r => keep.has(r.no)), ...rows.slice(100)];
-  const sets = [[1, rows.slice(0, 100)], [2, set2], [3, set3], [4, set4], [5, set5], [6, set6]];
+  const sets = [[1, rows.slice(0, 100)], [2, set2], [3, set3], [4, set4], [5, set5], [6, set6], [7, set7]];
   for (const [set, list] of sets) {
     if (process.argv[3] && !process.argv[3].split(',').includes(String(set))) continue;
     const pg = await browser.newPage();
