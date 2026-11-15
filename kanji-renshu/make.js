@@ -6,6 +6,8 @@
 // 第6回 = 2年生20字（第5回で外した5字＋その次に画数の多い15字）＋ 別の3年生20字（10字ごとに5字＋5字）・4ページ
 // 第7回 = 2年生25字（第6回の次に画数の多い字）＋ 別の3年生25字（10字ごとに5字＋5字）・5ページ
 // 第8回 = 3年生30字（新しい字）・3ページ。お手本に書き順（KanjiVG, CC BY-SA 3.0）をつける
+// 第9〜11回 = のこりの3年生から30字ずつ（画数の少ない順）、第12回 = のこり10字＋ふくしゅう20字、
+// 第13回 = ふくしゅう30字。ふくしゅうは第4〜7回の3年生（書き順なし）から画数の多い順。第8回以降は書き順つき
 // 第2回 = 101〜160字目（60字）＋ 第1回とかぶる61〜100字目のうち画数の多い10字 ＝ 70字
 const fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
@@ -28,7 +30,12 @@ const set4 = mixSet(byStrokes.slice(0, 40), g3all.filter(r => r.set === '4'), 2)
 const set5 = mixSet(byStrokes.slice(40, 75), g3all.filter(r => r.set === '5'), 3);
 const set6 = mixSet(byStrokes.slice(75, 95), g3all.filter(r => r.set === '6'), 5);
 const set7 = mixSet(byStrokes.slice(95, 120), g3all.filter(r => r.set === '7'), 5);
-const set8 = g3all.filter(r => r.set === '8').sort((a, b) => a.n - b.n).map((r, i) => ({ ...r, no: i + 1 }));
+const only3 = list => [...list].sort((a, b) => a.n - b.n).map((r, i) => ({ ...r, no: i + 1 }));
+const set8 = only3(g3all.filter(r => r.set === '8'));
+const review = g3all.filter(r => ['4', '5', '6', '7'].includes(r.set)).sort((a, b) => b.n - a.n);
+const [set9, set10, set11] = ['9', '10', '11'].map(n => only3(g3all.filter(r => r.set === n)));
+const set12 = only3([...g3all.filter(r => r.set === '12'), ...review.slice(0, 20)]);
+const set13 = only3(review.slice(20, 50));
 
 // 書き順：KanjiVG のストローク（1画ずつ、前の画はうすく、いまの画は濃く）
 function strokeOrder(k) {
@@ -70,7 +77,7 @@ function page(set, p, total, items, so) {
 function html(set, list) {
   const pages = [];
   const total = Math.ceil(list.length / 10);
-  for (let p = 0; p < total; p++) pages.push(page(set, p + 1, total, list.slice(p * 10, p * 10 + 10), set === 8));
+  for (let p = 0; p < total; p++) pages.push(page(set, p + 1, total, list.slice(p * 10, p * 10 + 10), set >= 8));
   return `<!doctype html><html lang="ja"><head><meta charset="utf-8">
 <style>
 ${fontCss ? fs.readFileSync(fontCss, 'utf8') : ''}
@@ -117,7 +124,7 @@ header { height: 13mm; white-space: nowrap; display: flex; justify-content: spac
   const overlap = rows.slice(60, 100);
   const keep = new Set([...overlap].sort((a, b) => b.n - a.n || a.no - b.no).slice(0, 10).map(r => r.no));
   const set2 = [...overlap.filter(r => keep.has(r.no)), ...rows.slice(100)];
-  const sets = [[1, rows.slice(0, 100)], [2, set2], [3, set3], [4, set4], [5, set5], [6, set6], [7, set7], [8, set8]];
+  const sets = [[1, rows.slice(0, 100)], [2, set2], [3, set3], [4, set4], [5, set5], [6, set6], [7, set7], [8, set8], [9, set9], [10, set10], [11, set11], [12, set12], [13, set13]];
   for (const [set, list] of sets) {
     if (process.argv[3] && !process.argv[3].split(',').includes(String(set))) continue;
     const pg = await browser.newPage();
