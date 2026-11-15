@@ -5,6 +5,7 @@
 // 第5回 = 2年生の次に画数の多い35字（第4回と別）＋ 別の3年生15字（10字ごとに2年7字＋3年3字）
 // 第6回 = 2年生20字（第5回で外した5字＋その次に画数の多い15字）＋ 別の3年生20字（10字ごとに5字＋5字）・4ページ
 // 第7回 = 2年生25字（第6回の次に画数の多い字）＋ 別の3年生25字（10字ごとに5字＋5字）・5ページ
+// 第8回 = 3年生30字（新しい字）・3ページ。お手本に書き順（KanjiVG, CC BY-SA 3.0）をつける
 // 第2回 = 101〜160字目（60字）＋ 第1回とかぶる61〜100字目のうち画数の多い10字 ＝ 70字
 const fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
@@ -27,12 +28,21 @@ const set4 = mixSet(byStrokes.slice(0, 40), g3all.filter(r => r.set === '4'), 2)
 const set5 = mixSet(byStrokes.slice(40, 75), g3all.filter(r => r.set === '5'), 3);
 const set6 = mixSet(byStrokes.slice(75, 95), g3all.filter(r => r.set === '6'), 5);
 const set7 = mixSet(byStrokes.slice(95, 120), g3all.filter(r => r.set === '7'), 5);
+const set8 = g3all.filter(r => r.set === '8').sort((a, b) => a.n - b.n).map((r, i) => ({ ...r, no: i + 1 }));
+
+// 書き順：KanjiVG のストローク（1画ずつ、前の画はうすく、いまの画は濃く）
+function strokeOrder(k) {
+  const f = path.join(dir, 'kanjivg', k.codePointAt(0).toString(16).padStart(5, '0') + '.svg');
+  const ds = [...fs.readFileSync(f, 'utf8').matchAll(/<path[^>]*id="kvg:[0-9a-f]+-s\d+"[^>]*\sd="([^"]+)"/g)].map(m => m[1]);
+  return '<div class="so">' + ds.map((_, i) => `<svg viewBox="0 0 109 109"><text x="4" y="22">${i + 1}</text>` +
+    ds.slice(0, i).map(d => `<path d="${d}" class="prev"/>`).join('') + `<path d="${ds[i]}" class="cur"/></svg>`).join('') + '</div>';
+}
 const set3 = load('grade1.tsv').filter(r => !EASY1.has(r.k)).map((r, i) => ({ ...r, no: i + 1 }));
 
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 const kunHtml = s => s ? s.split('・').map(r => esc(r).replace(/\((.+?)\)/, '<span class="okuri">$1</span>')).join('<br>') : '';
 
-function page(set, p, total, items) {
+function page(set, p, total, items, so) {
   const cols = items.map((it, i) => `
     <div class="col">
       <div class="no${it.g3 ? ' g3' : ''}">${it.g3 ? '3年 ' : ''}${it.no}</div>
@@ -42,23 +52,25 @@ function page(set, p, total, items) {
           <div class="on">${esc(it.on)}</div>
           <div class="kun">${kunHtml(it.kun)}</div>
         </div>
+        ${so ? strokeOrder(it.k) : ''}
         <div class="strokes">${it.n}画</div>
       </div>
       ${Array.from({ length: 10 }, (_, j) => `<div class="cell">${j < 2 ? `<span class="trace">${it.k}</span>` : ''}</div>`).join('')}
     </div>`).join('');
-  return `<section class="page">
+  return `<section class="page${so ? ' with-so' : ''}">
     <header>
       <div class="title">かんじ れんしゅうちょう <b>第${set}回</b>${set === 3 ? '（1年生）' : ''}　${p} / ${total}ページ</div>
       <div class="meta"><span>&emsp;&emsp;月&emsp;&emsp;日</span><span class="name">なまえ</span><span class="done">できた<i></i></span></div>
     </header>
     <div class="grid">${cols}</div>
+    ${so ? '<div class="credit">書き順：KanjiVG（CC BY-SA 3.0）</div>' : ''}
   </section>`;
 }
 
 function html(set, list) {
   const pages = [];
   const total = Math.ceil(list.length / 10);
-  for (let p = 0; p < total; p++) pages.push(page(set, p + 1, total, list.slice(p * 10, p * 10 + 10)));
+  for (let p = 0; p < total; p++) pages.push(page(set, p + 1, total, list.slice(p * 10, p * 10 + 10), set === 8));
   return `<!doctype html><html lang="ja"><head><meta charset="utf-8">
 <style>
 ${fontCss ? fs.readFileSync(fontCss, 'utf8') : ''}
@@ -78,6 +90,15 @@ header { height: 13mm; white-space: nowrap; display: flex; justify-content: spac
 .model { height: 63mm; border-bottom: 0.5mm solid #333; display: flex; flex-direction: column; align-items: center; padding-top: 1mm; }
 .big { font-size: 40pt; line-height: 17mm; font-weight: 600; }
 .read { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 1.5mm; writing-mode: vertical-rl; font-size: 10pt; line-height: 1.25; margin-top: 1mm; overflow: hidden; }
+.with-so .model { height: 79mm; }
+.with-so .read { flex: 0 0 23mm; }
+.so { display: grid; grid-template-columns: repeat(3, 5.3mm); gap: 0.3mm; margin: 1.5mm 0 1mm; align-content: start; flex: 1; }
+.so svg { width: 5.3mm; height: 5.3mm; border: 0.15mm solid #ccc; }
+.so path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.so .prev { stroke: #aaa; stroke-width: 7; }
+.so .cur { stroke: #c0392b; stroke-width: 8.5; }
+.so text { font-size: 22px; fill: #888; font-family: sans-serif; }
+.credit { font-size: 7pt; color: #888; text-align: right; width: 180mm; margin-top: 1mm; }
 .no.g3 { background: #fbe3c4; color: #8a4b00; font-weight: 600; }
 .on { color: #c0392b; } .kun { color: #1f5fa8; }
 .okuri { color: #888; }
@@ -96,7 +117,7 @@ header { height: 13mm; white-space: nowrap; display: flex; justify-content: spac
   const overlap = rows.slice(60, 100);
   const keep = new Set([...overlap].sort((a, b) => b.n - a.n || a.no - b.no).slice(0, 10).map(r => r.no));
   const set2 = [...overlap.filter(r => keep.has(r.no)), ...rows.slice(100)];
-  const sets = [[1, rows.slice(0, 100)], [2, set2], [3, set3], [4, set4], [5, set5], [6, set6], [7, set7]];
+  const sets = [[1, rows.slice(0, 100)], [2, set2], [3, set3], [4, set4], [5, set5], [6, set6], [7, set7], [8, set8]];
   for (const [set, list] of sets) {
     if (process.argv[3] && !process.argv[3].split(',').includes(String(set))) continue;
     const pg = await browser.newPage();
