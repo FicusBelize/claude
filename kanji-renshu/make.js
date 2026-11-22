@@ -8,6 +8,9 @@
 // 第8回 = 3年生30字（新しい字）・3ページ。お手本に書き順（KanjiVG, CC BY-SA 3.0）をつける
 // 第9〜11回 = のこりの3年生から30字ずつ（画数の少ない順）、第12回 = のこり10字＋ふくしゅう20字、
 // 第13回 = ふくしゅう30字。ふくしゅうは第4〜7回の3年生（書き順なし）から画数の多い順。第8回以降は書き順つき
+// 第14〜18回 = 1年生15字＋3年生15字（10字ごとに1年5字＋3年5字）・各3ページ
+//   1年生：80字から一二三十八を除いた75字を画数の少ない順に
+//   3年生：まだ書き順つきで練習していない20字（第4〜7回の残り）＋第8〜12回の新出から画数の多い55字
 // 第2回 = 101〜160字目（60字）＋ 第1回とかぶる61〜100字目のうち画数の多い10字 ＝ 70字
 const fs = require('fs'), path = require('path');
 const { chromium } = require('playwright');
@@ -36,6 +39,15 @@ const review = g3all.filter(r => ['4', '5', '6', '7'].includes(r.set)).sort((a, 
 const [set9, set10, set11] = ['9', '10', '11'].map(n => only3(g3all.filter(r => r.set === n)));
 const set12 = only3([...g3all.filter(r => r.set === '12'), ...review.slice(0, 20)]);
 const set13 = only3(review.slice(20, 50));
+const g1all = load('grade1.tsv').filter(r => !'一二三十八'.includes(r.k)).sort((a, b) => a.n - b.n || a.no - b.no).map(r => ({ ...r, g1: true }));
+const g3mix = [...review.slice(50).sort((a, b) => a.n - b.n),
+  ...g3all.filter(r => +r.set >= 8).sort((a, b) => b.n - a.n).slice(0, 55).sort((a, b) => a.n - b.n)];
+const mixed = [];
+for (let s = 0; s < 5; s++) {
+  const a = g1all.slice(s * 15, s * 15 + 15), b = g3mix.slice(s * 15, s * 15 + 15), out = [];
+  for (let p = 0; p < 3; p++) out.push(...a.slice(p * 5, p * 5 + 5), ...b.slice(p * 5, p * 5 + 5));
+  mixed.push(out.map((r, i) => ({ ...r, no: i + 1 })));
+}
 
 // 書き順：KanjiVG のストローク（1画ずつ、前の画はうすく、いまの画は濃く）
 function strokeOrder(k) {
@@ -52,7 +64,7 @@ const kunHtml = s => s ? s.split('・').map(r => esc(r).replace(/\((.+?)\)/, '<s
 function page(set, p, total, items, so) {
   const cols = items.map((it, i) => `
     <div class="col">
-      <div class="no${it.g3 ? ' g3' : ''}">${it.g3 ? '3年 ' : ''}${it.no}</div>
+      <div class="no${it.g3 ? ' g3' : it.g1 ? ' g1' : ''}">${it.g3 ? '3年 ' : it.g1 ? '1年 ' : ''}${it.no}</div>
       <div class="model">
         <div class="big">${it.k}</div>
         <div class="read">
@@ -66,7 +78,7 @@ function page(set, p, total, items, so) {
     </div>`).join('');
   return `<section class="page${so ? ' with-so' : ''}">
     <header>
-      <div class="title">かんじ れんしゅうちょう <b>第${set}回</b>${set === 3 ? '（1年生）' : ''}　${p} / ${total}ページ</div>
+      <div class="title">かんじ れんしゅうちょう <b>第${set}回</b>${set === 3 ? '（1年生）' : set >= 14 ? '（1年・3年）' : ''}　${p} / ${total}ページ</div>
       <div class="meta"><span>&emsp;&emsp;月&emsp;&emsp;日</span><span class="name">なまえ</span><span class="done">できた<i></i></span></div>
     </header>
     <div class="grid">${cols}</div>
@@ -106,6 +118,7 @@ header { height: 13mm; white-space: nowrap; display: flex; justify-content: spac
 .so .cur { stroke: #c0392b; stroke-width: 8.5; }
 .so text { font-size: 22px; fill: #888; font-family: sans-serif; }
 .credit { font-size: 7pt; color: #888; text-align: right; width: 180mm; margin-top: 1mm; }
+.no.g1 { background: #d8eed6; color: #2d6a2a; font-weight: 600; }
 .no.g3 { background: #fbe3c4; color: #8a4b00; font-weight: 600; }
 .on { color: #c0392b; } .kun { color: #1f5fa8; }
 .okuri { color: #888; }
@@ -124,7 +137,7 @@ header { height: 13mm; white-space: nowrap; display: flex; justify-content: spac
   const overlap = rows.slice(60, 100);
   const keep = new Set([...overlap].sort((a, b) => b.n - a.n || a.no - b.no).slice(0, 10).map(r => r.no));
   const set2 = [...overlap.filter(r => keep.has(r.no)), ...rows.slice(100)];
-  const sets = [[1, rows.slice(0, 100)], [2, set2], [3, set3], [4, set4], [5, set5], [6, set6], [7, set7], [8, set8], [9, set9], [10, set10], [11, set11], [12, set12], [13, set13]];
+  const sets = [[1, rows.slice(0, 100)], [2, set2], [3, set3], [4, set4], [5, set5], [6, set6], [7, set7], [8, set8], [9, set9], [10, set10], [11, set11], [12, set12], [13, set13], ...mixed.map((m, i) => [14 + i, m])];
   for (const [set, list] of sets) {
     if (process.argv[3] && !process.argv[3].split(',').includes(String(set))) continue;
     const pg = await browser.newPage();
