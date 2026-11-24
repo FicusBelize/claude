@@ -4,7 +4,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=BIZ+UDPGothic:wght@400;700&display=swap">
 <style>
-/* Layout: 平日5日×朝夜の献立表。各マスに「どの買い物で買うか」の札。下に2回分の買い物メモ。 */
+/* Layout: 平日5日×夜（メイン・副菜）の献立表。各マスに「どの買い物で買うか」の札。下に2回分の買い物メモ。 */
 :root {
   --bg: #f4f7f4; --surface: #ffffff; --ink: #1f2a26; --muted: #5d6b65; --line: #d7e0db;
   --accent: #1e6b5c; --accent-ink: #ffffff; --accent-soft: #dcefe9;
@@ -80,7 +80,7 @@ nav.tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--
 @media (min-width: 520px) and (max-width: 819px) { .slot.side, .slot.main { margin-top: 0; border-top: 0; border-radius: 8px } }
 .stars { color: var(--star); letter-spacing: 1px; font-size: .85rem; white-space: nowrap }
 @media (min-width: 520px) and (max-width: 819px) {
-  .day { grid-template-columns: repeat(3, minmax(0, 1fr)) }
+  .day { grid-template-columns: repeat(2, minmax(0, 1fr)) }
   .day .dname { grid-column: 1 / -1 }
 }
 @media (min-width: 820px) {
@@ -193,7 +193,7 @@ body.noscroll { overflow: hidden }
       <div class="settings">
         <label for="splitSel">水曜の買い物で買う分</label>
         <select class="plain" id="splitSel">
-          <option value="thu_b">木曜の朝ごはんから</option>
+          <option value="thu_d">木曜の夜ごはんから</option>
           <option value="wed_d">水曜の夜ごはんから</option>
         </select>
       </div>
@@ -211,10 +211,8 @@ body.noscroll { overflow: hidden }
         <label class="field"><span>料理名</span><input type="text" id="fName" required placeholder="例：鶏の照り焼き"></label>
         <fieldset><legend>いつ食べる？</legend>
           <div class="seg">
-            <label><input type="radio" name="meal" value="b" id="mealB"> 朝ごはん</label>
             <label><input type="radio" name="meal" value="d" id="mealD" checked> 夜・メイン</label>
             <label><input type="radio" name="meal" value="side" id="mealSide"> 夜・副菜</label>
-            <label><input type="radio" name="meal" value="both" id="mealBoth"> 朝にも夜メインにも</label>
           </div>
         </fieldset>
         <fieldset><legend>子どもの人気</legend>
@@ -244,7 +242,6 @@ body.noscroll { overflow: hidden }
         <div class="bar">
           <div class="seg" role="group" aria-label="しぼりこみ">
             <label><input type="radio" name="flt" value="all" id="fltAll" checked> すべて</label>
-            <label><input type="radio" name="flt" value="b" id="fltB"> 朝</label>
             <label><input type="radio" name="flt" value="d" id="fltD"> 夜メイン</label>
             <label><input type="radio" name="flt" value="s" id="fltS"> 副菜</label>
           </div>
@@ -263,8 +260,8 @@ body.noscroll { overflow: hidden }
 (() => {
 "use strict";
 const DAYS = [["mon","月"],["tue","火"],["wed","水"],["thu","木"],["fri","金"]];
-const MEALS = [["b","朝ごはん"],["d","夜・メイン"],["s","夜・副菜"]];
-const SHORT = { b: "朝", d: "夜", s: "夜(副菜)" };
+const MEALS = [["d","夜・メイン"],["s","夜・副菜"]];
+const SHORT = { d: "(メイン)", s: "(副菜)" };
 const SLOTS = DAYS.flatMap(([d]) => MEALS.map(([m]) => d + "_" + m));
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -346,7 +343,7 @@ const state = {
   week: keyOf(mondayOf(new Date())),
   plan: emptyPlan(),
   prevPlan: null,
-  settings: { split: "thu_b" },
+  settings: { split: "thu_d" },
   mode: "loading",
 };
 function emptyPlan() { return { slots: {}, checked: {} }; }
@@ -439,20 +436,22 @@ async function boot() {
       if (!snap.metadata.fromCache) { loaded = true; clearTimeout(timer); setNote("家族で共有の保存先に保存しています"); }
       renderAll();
     }, e => { clearTimeout(timer); console.error(e); setNote("レシピを読み込めませんでした"); });
-    db.doc("settings/main").onSnapshot(s => { if (s.exists) { state.settings = { split: "thu_b", ...s.data() }; renderAll(); } }, () => {});
+    db.doc("settings/main").onSnapshot(s => { if (s.exists) { state.settings = { split: "thu_d", ...s.data() }; renderAll(); } }, () => {});
   } else {
     state.mode = "local";
     const d = local.read();
     state.recipes = Object.fromEntries(Object.entries(d.recipes || {}).map(([k, v]) => [k, normalize(v)]));
-    state.settings = { split: "thu_b", ...(d.settings || {}) };
+    state.settings = { split: "thu_d", ...(d.settings || {}) };
     setNote("このブラウザに保存しています");
   }
   store.loadWeek();
 }
 
 /* ---------- 自動献立 ---------- */
+// 水曜の買い物で買い始めるマス（前の「木曜の朝から」の設定は「木曜の夜から」として読む）
+const splitSlot = () => SLOTS.includes(state.settings.split) ? state.settings.split : "thu_d";
 function tripOf(slot) {
-  return SLOTS.indexOf(slot) >= SLOTS.indexOf(state.settings.split) ? "b" : "a";
+  return SLOTS.indexOf(slot) >= SLOTS.indexOf(splitSlot()) ? "b" : "a";
 }
 function pickFor(slot, chosen) {
   const [day, meal] = slot.split("_");
@@ -490,8 +489,7 @@ function autoFill() {
   if (!recipeList().length) { toast("先にレシピ帳にレシピを入れてください"); location.hash = "recipes"; return; }
   const chosen = currentChosen();
   const open = SLOTS.filter(s => !state.plan.slots[s]?.locked);
-  // 夜ごはん→朝ごはんの順に決める（夜の方が材料が多いので、朝は夜の材料と合わせやすくなる）
-  // 夜メイン→副菜→朝の順に決める（メインの材料と合わせやすくする）
+  // メイン→副菜の順に決める（副菜をメインの材料と合わせやすくする）
   const ord = { d: 0, s: 1, b: 2 };
   open.sort((a, b) => ord[a.split("_")[1]] - ord[b.split("_")[1]]);
   for (const s of open) chosen[s] = null;
@@ -500,7 +498,7 @@ function autoFill() {
   state.plan.checked = {};
   store.savePlan();
   const missing = open.filter(s => !chosen[s]);
-  const lack = [...new Set(missing.map(s => ({ b: "朝ごはん", d: "夜のメイン", s: "副菜" })[s.split("_")[1]]))];
+  const lack = [...new Set(missing.map(s => ({ d: "メイン", s: "副菜" })[s.split("_")[1]]))];
   toast(lack.length ? `${lack.join("・")}のレシピが足りません。レシピ帳に入れてください` : "献立を作りました");
 }
 function rerollOne(slot) {
@@ -539,9 +537,9 @@ function buildTrips() {
 }
 function tripRange(k) {
   const mon = fromKey(state.week);
-  const idx = SLOTS.indexOf(state.settings.split);
+  const idx = SLOTS.indexOf(splitSlot());
   const first = k === "a" ? SLOTS[0] : SLOTS[idx], last = k === "a" ? SLOTS[idx - 1] : SLOTS[SLOTS.length - 1];
-  const lab = (s) => { const [d, m] = s.split("_"); const di = DAYS.findIndex(([x]) => x === d); return `${md(addDays(mon, di))}(${DAYS[di][1]})${m === "b" ? "朝" : "夜"}`; };
+  const lab = (s) => { const [d, m] = s.split("_"); const di = DAYS.findIndex(([x]) => x === d); return `${md(addDays(mon, di))}(${DAYS[di][1]})夜`; };
   return `${lab(first)}〜${lab(last)}`;
 }
 const tripTitle = (k) => k === "a" ? "土日の買い物" : "水曜の買い物";
@@ -577,7 +575,7 @@ function renderPlan() {
     </div>`).join("");
 }
 function renderShopping() {
-  $("splitSel").value = state.settings.split;
+  $("splitSel").value = splitSlot();
   const trips = buildTrips();
   $("trips").innerHTML = ["a", "b"].map(k => {
     const items = trips[k];
@@ -619,12 +617,12 @@ function renderRecipes() {
   const list = f === "all" ? all : all.filter(r => fits(r, f));
   const nb = all.filter(r => fits(r, "b")).length, nd = all.filter(r => fits(r, "d")).length;
   const ns = all.filter(r => fits(r, "s")).length;
-  $("rcount").textContent = `朝 ${nb}品・メイン ${nd}品・副菜 ${ns}品`;
+  $("rcount").textContent = `メイン ${nd}品・副菜 ${ns}品`;
   if (!all.length) {
-    $("rlist").innerHTML = `<div class="empty-state"><strong>まだレシピがありません。</strong><br>子どもたちが喜んだ料理を、左の欄から1つずつ入れていきましょう。朝ごはん3品・夜のメイン5品・副菜4品くらいあると、自動の献立がうまく回ります。</div>`;
+    $("rlist").innerHTML = `<div class="empty-state"><strong>まだレシピがありません。</strong><br>子どもたちが喜んだ料理を、左の欄から1つずつ入れていきましょう。メイン5品・副菜4品くらいあると、自動の献立がうまく回ります。</div>`;
     return;
   }
-  const mealJ = { b: "朝", d: "夜・メイン", side: "夜・副菜", both: "朝・夜メイン" };
+  const mealJ = { b: "朝（献立には出ません）", d: "メイン", side: "副菜", both: "メイン" };
   $("rlist").innerHTML = list.map(r => `
     <article class="rcard" data-id="${esc(r.id)}">
       <div class="row"><h3>${esc(r.name)}</h3>
@@ -741,7 +739,7 @@ $("rlist").addEventListener("click", e => {
     location.hash = "recipes";
     editing = r.id;
     $("fName").value = r.name;
-    $({ b: "mealB", d: "mealD", side: "mealSide", both: "mealBoth" }[r.meal]).checked = true;
+    $(r.meal === "side" ? "mealSide" : "mealD").checked = true;
     $("rate" + r.rating).checked = true;
     $("fIng").value = r.ingredientsText || (r.ingredients || []).map(i => `${i.name} ${fmtQty(i.num, i.unit)}`.trim()).join("\n");
     $("fPantry").value = r.pantryText || (r.pantry || []).map(i => `${i.name} ${fmtQty(i.num, i.unit)}`.trim()).join("\n");
