@@ -69,13 +69,13 @@ header { height: 16mm; display: flex; justify-content: space-between; align-item
 .body { writing-mode: vertical-rl; height: 250mm; margin-top: 5mm; font-size: 16pt; line-height: 1; }
 .head { width: 12mm; font-size: 11.5pt; font-weight: 600; padding-top: 2mm; padding-right: 1mm; border-right: 0.3mm solid #999; padding-left: 3mm; }
 .pts { font-weight: 400; font-size: 9.5pt; color: #555; }
-.q { width: 16.8mm; padding: 3mm 2mm 0 0; border-right: 0.2mm dashed #ccc; }
+.q { width: 16.8mm; padding: 3mm 7.5mm 0 0; border-right: 0.2mm dashed #ccc; }
 .num { display: inline-block; text-combine-upright: all; width: 6mm; height: 6mm; line-height: 6mm; text-align: center;
   font-size: 9.5pt; border: 0.3mm solid #555; border-radius: 50%; margin-bottom: 3mm; }
 .sent { letter-spacing: 0.05em; }
 .yomi { position: relative; }
 .yomi::before { content: ''; position: absolute; right: 0.4mm; top: -0.6mm; bottom: -0.6mm; border-right: 0.5mm solid #222; }
-.abox { position: absolute; left: -7.2mm; top: -1mm; width: 8mm; border: 0.3mm solid #555; border-radius: 4mm; }
+.abox { position: absolute; right: -8.6mm; top: -1mm; width: 8mm; border: 0.3mm solid #555; border-radius: 4mm; }
 ruby.kaki { ruby-position: over; }
 .wbox { display: inline-block; width: 11mm; height: 11mm; border: 0.4mm solid #333; margin: 0.5mm 0; vertical-align: middle; }
 ruby.kaki rt { font-size: 10pt; color: #333; letter-spacing: 0.1em; }
