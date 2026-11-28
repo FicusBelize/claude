@@ -75,7 +75,7 @@ header { height: 16mm; display: flex; justify-content: space-between; align-item
 .sent { letter-spacing: 0.05em; }
 .yomi { position: relative; }
 .yomi::before { content: ''; position: absolute; right: 0.4mm; top: -0.6mm; bottom: -0.6mm; border-right: 0.5mm solid #222; }
-.abox { position: absolute; right: -8.6mm; top: -1mm; width: 8mm; border: 0.3mm solid #555; border-radius: 4mm; }
+.abox { position: absolute; right: -8.6mm; top: -1mm; width: 8mm; }
 ruby.kaki { ruby-position: over; }
 .wbox { display: inline-block; width: 11mm; height: 11mm; border: 0.4mm solid #333; margin: 0.5mm 0; vertical-align: middle; }
 ruby.kaki rt { font-size: 10pt; color: #333; letter-spacing: 0.1em; }
