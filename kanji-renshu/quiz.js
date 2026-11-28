@@ -28,23 +28,23 @@ const HEAD = {
 const sec = { yomi: '一', kaki: '二' };
 const count = t => parsed.filter(p => p.type === t).length;
 
+// 1ページに1種類（読み・書き）。上下2段に分けて、上の段から右→左に並べる
 const pages = [];
-for (let p = 0; p < parsed.length; p += 10) {
-  const cols = [];
-  parsed.slice(p, p + 10).forEach((q, j) => {
-    const prev = p + j > 0 ? parsed[p + j - 1].type : null;
-    if (q.type !== prev) cols.push(`<div class="head">${sec[q.type]}、${HEAD[q.type]}<span class="pts">（1もん1てん・${count(q.type)}てん）</span></div>`);
-    cols.push(`<div class="q"><span class="num">${q.no}</span><span class="sent">${q.html}</span></div>`);
-  });
+const types = [...new Set(parsed.map(q => q.type))];
+types.forEach((t, pi) => {
+  const list = parsed.filter(q => q.type === t), half = Math.ceil(list.length / 2);
+  const col = q => `<div class="q" style="width:${(180 / half).toFixed(2)}mm"><span class="num">${q.no}</span><span class="sent">${q.html}</span></div>`;
   pages.push(`<section class="page">
     <header>
       <div class="title">${esc(title)}</div>
       <div class="meta"><span>&emsp;&emsp;月&emsp;&emsp;日</span><span class="name">なまえ</span><span class="score"><i></i>／${parsed.length}てん</span></div>
     </header>
-    <div class="body">${cols.join('')}</div>
-    <div class="pg">${p / 10 + 1} / ${Math.ceil(parsed.length / 10)}</div>
+    <div class="head">${sec[t]}、${HEAD[t]}<span class="pts">（1もん1てん・${list.length}てん）</span></div>
+    <div class="tier">${list.slice(0, half).map(col).join('')}</div>
+    <div class="tier">${list.slice(half).map(col).join('')}</div>
+    <div class="pg">${pi + 1} / ${types.length}</div>
   </section>`);
-}
+});
 
 const ansRows = t => parsed.filter(q => q.type === t).map(q => `<tr><td class="n">${q.no}</td><td>${esc(q.plain)}</td><td class="a">${esc(q.ans)}</td></tr>`).join('');
 pages.push(`<section class="page answers">
@@ -66,10 +66,11 @@ header { height: 16mm; display: flex; justify-content: space-between; align-item
 .meta { display: flex; gap: 5mm; font-size: 11pt; align-items: flex-end; }
 .name { border-bottom: 0.3mm solid #444; width: 45mm; }
 .score i { display: inline-block; width: 13mm; height: 9mm; border: 0.4mm solid #444; border-radius: 2mm; vertical-align: bottom; margin-right: 1mm; }
-.body { writing-mode: vertical-rl; height: 250mm; margin-top: 5mm; font-size: 16pt; line-height: 1; }
-.head { width: 12mm; font-size: 11.5pt; font-weight: 600; padding-top: 2mm; padding-right: 1mm; border-right: 0.3mm solid #999; padding-left: 3mm; }
+.tier { writing-mode: vertical-rl; height: 121mm; font-size: 16pt; line-height: 1; border-top: 0.3mm solid #999; }
+.tier + .tier { margin-top: 3mm; }
+.head { font-size: 12pt; font-weight: 600; padding: 3mm 0 2mm; }
 .pts { font-weight: 400; font-size: 9.5pt; color: #555; }
-.q { width: 16.8mm; padding: 3mm 7.5mm 0 0; border-right: 0.2mm dashed #ccc; }
+.q { padding: 3mm 8mm 0 0; border-right: 0.2mm dashed #ccc; }
 .num { display: inline-block; text-combine-upright: all; width: 6mm; height: 6mm; line-height: 6mm; text-align: center;
   font-size: 9.5pt; border: 0.3mm solid #555; border-radius: 50%; margin-bottom: 3mm; }
 .sent { letter-spacing: 0.05em; }
